@@ -1,57 +1,69 @@
 import urlparse
-import oauth2 as oauth
+import requests
+from oauth_hook import OAuthHook
 from django.http import HttpResponse, HttpResponseRedirect
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from quickbooks.models import QuickbooksToken, MissingTokenException
+from django.shortcuts import render_to_response
+from quickbooks.models import QuickbooksToken, get_quickbooks_token
 from quickbooks.api import QuickbooksApi
 
 REQUEST_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_request_token'
 ACCESS_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_access_token'
 AUTHORIZATION_URL = 'https://appcenter.intuit.com/Connect/Begin'
 
-consumer = oauth.Consumer(settings.QUICKBOOKS['CONSUMER_KEY'], settings.QUICKBOOKS['CONSUMER_SECRET'])
-
-def _get_saved_token(request):
-    try:
-        return QuickbooksToken.objects.filter(user=request.user)[0]
-    except IndexError:
-        raise MissingTokenException("No QuickBooks OAuth token exists for this user")
 
 @login_required
 def request_oauth_token(request):
     access_token_callback = settings.QUICKBOOKS['OAUTH_CALLBACK_URL']
-    client = oauth.Client(consumer)
-    resp, content = client.request("%s?oauth_callback=%s" % (REQUEST_TOKEN_URL, access_token_callback), "GET")
-    if resp['status'] != '200':
-        raise Exception("Invalid response: %s" % resp['status'])
-    request_token = dict(urlparse.parse_qsl(content))
-    request.session['qb_oauth_token'] = request_token['oauth_token']
-    request.session['qb_oauth_token_secret'] = request_token['oauth_token_secret']
-    return HttpResponseRedirect("%s?oauth_token=%s" % (AUTHORIZATION_URL, request_token['oauth_token']))
+    quickbooks_oauth_hook = OAuthHook(consumer_key=settings.QUICKBOOKS['CONSUMER_KEY'],
+                                      consumer_secret=settings.QUICKBOOKS['CONSUMER_SECRET'])
+    response = requests.post(REQUEST_TOKEN_URL,
+                             params={'oauth_callback': access_token_callback},
+                             hooks={'pre_request': quickbooks_oauth_hook})
+    qs = urlparse.parse_qs(response.text)
+    request_token = qs['oauth_token'][0]
+    request_token_secret = qs['oauth_token_secret'][0]
+
+    request.session['qb_oauth_token'] = request_token
+    request.session['qb_oauth_token_secret'] = request_token_secret
+    return HttpResponseRedirect("%s?oauth_token=%s" % (AUTHORIZATION_URL, request_token))
+
 
 @login_required
 def get_access_token(request):
-    account = get_account(request)
-    token = oauth.Token(request.session['qb_oauth_token'], request.session['qb_oauth_token_secret'])
-    token.set_verifier(request.GET.get('oauth_verifier'))
-    client = oauth.Client(consumer, token)
-    resp, content = client.request(ACCESS_TOKEN_URL, "POST")
-    access_token = dict(urlparse.parse_qsl(content))
     realm_id = request.GET.get('realmId')
     data_source = request.GET.get('dataSource')
+    oauth_verifier = request.GET.get('oauth_verifier')
+    
+    quickbooks_oauth_hook = OAuthHook(request.session['qb_oauth_token'],
+                                      request.session['qb_oauth_token_secret'],
+                                      settings.QUICKBOOKS['CONSUMER_KEY'],
+                                      settings.QUICKBOOKS['CONSUMER_SECRET'])
+    response = requests.post(ACCESS_TOKEN_URL, 
+                             {'oauth_verifier': oauth_verifier}, 
+                             hooks={'pre_request': quickbooks_oauth_hook})
+    data = urlparse.parse_qs(response.content)
 
     QuickbooksToken.objects.create(
         user = request.user,
-        access_token = access_token['oauth_token'],
-        access_token_secret = access_token['oauth_token_secret'],
+        access_token = data['oauth_token'][0],
+        access_token_secret = data['oauth_token_secret'][0],
         realm_id = realm_id,
         data_source = data_source)
 
-    return HttpResponseRedirect(settings.QUICKBOOKS['ACCESS_COMPLETE_URL'])
+    return render_to_response('oauth_callback.html',
+                              {'complete_url': settings.QUICKBOOKS['ACCESS_COMPLETE_URL']})
+
 
 @login_required
 def blue_dot_menu(request):
-    token = _get_saved_token(request)
-    return HttpResponse(QuickbooksApi(token).get('Account/AppMenu'))
+    return HttpResponse(QuickbooksApi(request.user).app_menu())
 
+
+@login_required
+def disconnect(request):
+    token = get_quickbooks_token(request)
+    QuickbooksApi(token).disconnect()
+    token.delete()
+    return HttpResponseRedirect(settings.QUICKBOOKS['ACCESS_COMPLETE_URL'])
