@@ -1,1 +1,1 @@
-recursive-include hiicart/templates *.html
+recursive-include quickbooks/templates *.html
