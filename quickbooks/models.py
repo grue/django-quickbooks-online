@@ -17,6 +17,8 @@ def find_quickbooks_token(request_or_user):
         user = request_or_user
     else:
         user = request_or_user.user
+    if not user.is_authenticated():
+        return None
     try:
         return QuickbooksToken.objects.filter(user=user)[0]
     except IndexError:
