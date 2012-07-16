@@ -1,5 +1,6 @@
 import urllib
 import re
+import uuid
 import datetime
 from lxml import etree
 import requests
@@ -15,26 +16,16 @@ QUICKBOOKS_WINDOWS_URL_BASE = 'https://services.intuit.com/sb/'
 
 QB_NAMESPACE = 'http://www.intuit.com/sb/cdm/v2'
 QBO_NAMESPACE = 'http://www.intuit.com/sb/cdm/qbo'
-NSMAP = {None: QB_NAMESPACE, 'ns2': QBO_NAMESPACE}
+XML_SCHEMA_INSTANCE = 'http://www.w3.org/2001/XMLSchema-instance'
+QBO_NSMAP = {None: QB_NAMESPACE, 'ns2': QBO_NAMESPACE}
+QBD_NSMAP = {None: QB_NAMESPACE, 'xsi': XML_SCHEMA_INSTANCE}
 Q = "{%s}" % QB_NAMESPACE
+XSI = "{%S}" % XML_SCHEMA_INSTANCE
 
 
 def camel2hyphen(name):
     s1 = re.sub('(.)([A-Z][a-z]+)', r'\1-\2', name)
     return re.sub('([a-z0-9])([A-Z])', r'\1-\2', s1).lower()
-
-def get_url_name(name, action):
-    if name in ['CompanyMetaData', 'Preferences']:
-        return name.lower()
-    base = camel2hyphen(name)
-    if action == 'read':
-        # read multiple objects; pluralize
-        if base.endswith('s'):
-            return base + 'es'
-        elif base.endswith('y'):
-            return base[:-1] + 'ies'
-        return base + 's'
-    return base
 
 def obj2xml(parent, params):
     # etree operates on elts in place
@@ -48,6 +39,8 @@ def obj2xml(parent, params):
                 obj2xml(elt, listelt)
         else:
             elt = etree.SubElement(parent, Q + k)
+            if k == 'Id':
+                elt.set(Q + 'idDomain', 'NG')
             if isinstance(v, bool):
                 val = {True: 'true', False: 'false'}[v]
             elif isinstance(v, datetime.date) or isinstance(v, datetime.datetime):
@@ -72,6 +65,14 @@ def xml2obj(elt):
             else:
                 result[tagname] = xml2obj(child)
         return result
+
+def create_wrapped_qbd_root(action, object_name, nsmap):
+    wrapper = etree.Element(name, nsmap=nsmap)
+    wrapper.set(XSI + 'schemaLocation', 'http://www.intuit.com/sb/cdm/v2 ./RestDataFilter.xsd ')
+    wrapper.set('RequestId', uuid.uuid4().hex)
+    root = etree.SubElement(wrapper, Q + 'Object')
+    root.set(XSI + 'type', object_name)
+    return wrapper, root
 
 
 class QuickbooksError(Exception):
@@ -119,6 +120,22 @@ class QuickbooksApi(object):
                          header_auth=True)
         self.session = requests.session(hooks={'pre_request': hook})
         self.realm_id = token.realm_id
+        self.data_source = token.data_source
+        self.url_base = {'QBD': QUICKBOOKS_WINDOWS_URL_BASE, 'QBO': QUICKBOOKS_ONLINE_URL_BASE}[token.data_source]
+        self.nsmap = {'QBD': QBD_NSMAP, 'QBO': QBO_NSMAP}[token.data_source]
+
+    def _get_url_name(self, name, action):
+        if name in ['CompanyMetaData', 'Preferences']:
+            return name.lower()
+        base = camel2hyphen(name)
+        if action == 'read' and self.data_source == 'QBO':
+            # read multiple objects; pluralize
+            if base.endswith('s'):
+                return base + 'es'
+            elif base.endswith('y'):
+                return base[:-1] + 'ies'
+            return base + 's'
+        return base
 
     def _get(self, url, headers=None):
         return self.session.get(url, headers=headers, verify=False)
@@ -130,8 +147,8 @@ class QuickbooksApi(object):
         full_url = APPCENTER_URL_BASE + url
         return self._get(full_url)
 
-    def _qbo_request(self, object_name, method='GET', object_id=None, xml=None, headers=None, **kwargs):
-        url = "%s%s/%s/%s" % (QUICKBOOKS_ONLINE_URL_BASE, object_name, DATA_SERVICES_VERSION, self.realm_id)
+    def _qb_request(self, object_name, method='GET', object_id=None, xml=None, headers=None, **kwargs):
+        url = "%s%s/%s/%s" % (self.url_base, object_name, DATA_SERVICES_VERSION, self.realm_id)
         if object_id:
             url += '/%s' % object_id
         if kwargs:
@@ -162,29 +179,44 @@ class QuickbooksApi(object):
 
 
     def create(self, object_name, params):
-        url_name = get_url_name(object_name, 'create')
-        root = etree.Element(object_name, nsmap=NSMAP)
-        obj2xml(root, params)
-        return self._qbo_request(url_name, 'POST', xml=root, headers={'Content-Type': 'application/xml'})
+        url_name = self._get_url_name(object_name, 'create')
+        if self.data_source == 'QBO':
+            root = etree.Element(object_name, nsmap=self.nsmap)
+            obj2xml(root, params)
+        else:
+            root, data_root = create_wrapped_qbd_root('Add', object_name, self.nsmap)
+            obj2xml(data_root, params)
+
+        return self._qb_request(url_name, 'POST', xml=root, headers={'Content-Type': 'application/xml'})
 
     def read(self, object_name):
-        url_name = get_url_name(object_name, 'read')
-        return self._qbo_request(url_name, 'POST', headers={'Content-Type': 'x-www-form-urlencoded', 'Host': 'qbo.sbfinance.intuit.com'})
+        url_name = self._get_url_name(object_name, 'read')
+        return self._qb_request(url_name, 'POST', headers={'Content-Type': 'x-www-form-urlencoded', 'Host': 'qbo.sbfinance.intuit.com'})
 
     def get(self, object_name, object_id):
-        url_name = get_url_name(object_name, 'get')
-        return self._qbo_request(url_name, 'GET', object_id=object_id)
+        url_name = self._get_url_name(object_name, 'get')
+        if self.data_source == 'QBO':
+            return self._qb_request(url_name, 'GET', object_id=object_id)
+        else:
+            return self._qb_request(url_name, 'GET', object_id=object_id, idDomain='NG')
 
     def update(self, object_name, params):
         object_id = params['Id']
-        url_name = get_url_name(object_name, 'update')
-        root = etree.Element(object_name, nsmap=NSMAP)
-        obj2xml(root, params)
-        return self._qbo_request(url_name, 'POST', object_id=object_id, xml=root, headers={'Content-Type': 'application/xml'})
+        url_name = self._get_url_name(object_name, 'update')
+        if self.data_source == 'QBO':
+            root = etree.Element(object_name, nsmap=self.nsmap)
+            obj2xml(root, params)
+            return self._qb_request(url_name, 'POST', object_id=object_id, xml=root, headers={'Content-Type': 'application/xml'})
+        else:
+            root, data_root = create_wrapped_qbd_root('Mod', object_name, self.nsmap)
+            obj2xml(data_root, params)
+            return self._qb_request(url_name, 'POST', xml=root, headers={'Content-Type': 'application/xml'})
 
     def delete(self, object_name, params):
+        if self.data_source == 'QBD':
+            raise QuickbooksError("Can't delete QuickBooks for Windows objects")
         object_id = params['Id']
-        url_name = get_url_name(object_name, 'delete')
-        root = etree.Element(object_name, nsmap=NSMAP)
+        url_name = self._get_url_name(object_name, 'delete')
+        root = etree.Element(object_name, nsmap=self.nsmap)
         obj2xml(root, params)
-        return self._qbo_request(url_name, 'POST', object_id=object_id, xml=root, headers={'Content-Type': 'application/xml'}, methodx='delete')
+        return self._qb_request(url_name, 'POST', object_id=object_id, xml=root, headers={'Content-Type': 'application/xml'}, methodx='delete')
