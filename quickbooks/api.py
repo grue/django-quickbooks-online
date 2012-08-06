@@ -160,7 +160,7 @@ class QuickbooksApi(object):
 
     def _appcenter_request(self, url):
         full_url = APPCENTER_URL_BASE + url
-        return self._get(full_url)
+        return self._get(full_url).content
 
     def _qb_request(self, object_name, method='GET', object_id=None, xml=None, body_dict=None, **kwargs):
         url = "%s%s/%s/%s" % (self.url_base, object_name, DATA_SERVICES_VERSION, self.realm_id)
