@@ -45,6 +45,9 @@ def get_access_token(request):
                              hooks={'pre_request': quickbooks_oauth_hook})
     data = urlparse.parse_qs(response.content)
 
+    # Delete any existing access tokens
+    request.user.quickbookstoken_set.all().delete()
+
     QuickbooksToken.objects.create(
         user = request.user,
         access_token = data['oauth_token'][0],
