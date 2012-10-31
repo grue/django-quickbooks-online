@@ -35,13 +35,13 @@ def get_access_token(request):
     realm_id = request.GET.get('realmId')
     data_source = request.GET.get('dataSource')
     oauth_verifier = request.GET.get('oauth_verifier')
-    
+
     quickbooks_oauth_hook = OAuthHook(request.session['qb_oauth_token'],
                                       request.session['qb_oauth_token_secret'],
                                       settings.QUICKBOOKS['CONSUMER_KEY'],
                                       settings.QUICKBOOKS['CONSUMER_SECRET'])
-    response = requests.post(ACCESS_TOKEN_URL, 
-                             {'oauth_verifier': oauth_verifier}, 
+    response = requests.post(ACCESS_TOKEN_URL,
+                             {'oauth_verifier': oauth_verifier},
                              hooks={'pre_request': quickbooks_oauth_hook})
     data = urlparse.parse_qs(response.content)
 
@@ -65,5 +65,5 @@ def blue_dot_menu(request):
 def disconnect(request):
     token = get_quickbooks_token(request)
     QuickbooksApi(token).disconnect()
-    token.delete()
+    request.user.quickbookstoken_set.all().delete()
     return HttpResponseRedirect(settings.QUICKBOOKS['ACCESS_COMPLETE_URL'])

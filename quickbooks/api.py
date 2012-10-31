@@ -78,6 +78,9 @@ class TryLaterError(QuickbooksError):
 class CommunicationError(QuickbooksError):
     pass
 
+class AuthenticationFailure(QuickbooksError):
+    pass
+
 class ApiError(QuickbooksError):
     pass
 
@@ -121,6 +124,7 @@ class QuickbooksApi(object):
         self.url_base = {'QBD': QUICKBOOKS_WINDOWS_URL_BASE, 'QBO': QUICKBOOKS_ONLINE_URL_BASE}[token.data_source]
         self.nsmap = {'QBD': QBD_NSMAP, 'QBO': QBO_NSMAP}[token.data_source]
         self.xml_content_type = {'QBD': 'text/xml', 'QBO': 'application/xml'}[token.data_source]
+        self.token = token
 
     def _get_url_name(self, name, action):
         if name in ['CompanyMetaData', 'Preferences'] or self.data_source == 'QBD':
@@ -181,6 +185,10 @@ class QuickbooksApi(object):
         if response.status_code == 500 and 'errorCode=006003' in response.content:
             # QB appears to randomly throw 500 errors once and a while. Awesome.
             raise TryLaterError()
+        if response.status_code == 401:
+            # Token has expired. Delete all tokens for this user
+            self.token.user.quickbookstoken_set.all().delete()
+            raise AuthenticationFailure()
         if response.status_code != 200:
             try:
                 api_error(response)
