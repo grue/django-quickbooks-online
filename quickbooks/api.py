@@ -99,7 +99,7 @@ def api_error(response):
     db_error_code = err.get('DBErrorCode', '')
     err_msg = "%s: %s %s" % (error_code, cause, message)
 
-    if error_code == '3200' or 'oauth_problem' in message:
+    if str(error_code) in ['3200', '270'] or 'oauth_problem' in message:
         raise AuthenticationFailure()
 
     if cause == '-11202' or db_error_code == '20345':
