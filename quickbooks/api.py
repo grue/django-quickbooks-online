@@ -185,21 +185,24 @@ class QuickbooksApi(object):
                 response = self._post(url, body_dict, headers={'Content-Type': 'application/x-www-form-urlencoded'})
             else:
                 response = self._post(url, headers={'Content-Type': 'application/x-www-form-urlencoded'})
-        if response.status_code == 500 and 'errorCode=006003' in response.content:
-            # QB appears to randomly throw 500 errors once and a while. Awesome.
-            raise TryLaterError()
-        if response.status_code == 401:
-            # Token has expired. Delete all tokens for this user
+        try:
+            if response.status_code == 500 and 'errorCode=006003' in response.content:
+                # QB appears to randomly throw 500 errors once and a while. Awesome.
+                raise TryLaterError()
+            if response.status_code == 401:
+                # Token has expired. Delete all tokens for this user
+                raise AuthenticationFailure()
+            if response.status_code != 200:
+                try:
+                    api_error(response)
+                except etree.XMLSyntaxError:
+                    raise CommunicationError(response.content)
+            result = xml2obj(etree.fromstring(response.content))
+            if 'Error' in result:
+                api_error(result['Error'])
+        except AuthenticationFailure:
             self.token.user.quickbookstoken_set.all().delete()
-            raise AuthenticationFailure()
-        if response.status_code != 200:
-            try:
-                api_error(response)
-            except etree.XMLSyntaxError:
-                raise CommunicationError(response.content)
-        result = xml2obj(etree.fromstring(response.content))
-        if 'Error' in result:
-            api_error(result['Error'])
+            raise
         return result
 
     def app_menu(self):
