@@ -201,7 +201,7 @@ class QuickbooksApi(object):
             if 'Error' in result:
                 api_error(result['Error'])
         except AuthenticationFailure:
-            self.token.user.quickbookstoken_set.all().delete()
+            #self.token.user.quickbookstoken_set.all().delete()
             raise
         return result
 
