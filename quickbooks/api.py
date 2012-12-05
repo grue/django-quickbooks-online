@@ -241,7 +241,9 @@ class QuickbooksApi(object):
             while count == 100:
                 these_results = self._qb_request(url_name, 'POST', body_dict={'PageNum': str(page), 'ResultsPerPage': '100'})
                 count = int(these_results['Count'])
-                if count != 0:
+                if count == 1:
+                    results += [these_results['CdmCollections'][object_name]]
+                elif count > 0:
                     results += these_results['CdmCollections'][object_name]
                 page += 1
             return results
