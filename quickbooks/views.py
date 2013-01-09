@@ -57,14 +57,29 @@ def get_access_token(request):
         realm_id = realm_id,
         data_source = data_source)
 
+    # Cache blue dot menu
+    try:
+        request.session['quickbooks:blue_dot_menu'] = None
+        blue_dot_menu(request)
+    except AttributeError:
+        # Sessions framework isn't installed
+        raise Exception('The sessions framework must be installed for this ' +
+            'application to work.')
+
     return render_to_response('oauth_callback.html',
                               {'complete_url': settings.QUICKBOOKS['ACCESS_COMPLETE_URL']})
 
 
 @login_required
 def blue_dot_menu(request):
-    return HttpResponse(QuickbooksApi(request.user).app_menu())
+    """ Returns the blue dot menu. If possible a cached copy is returned.
+    """
 
+    html = request.session.get('quickbooks:blue_dot_menu')
+    if not html:
+        html = request.session['quickbooks:blue_dot_menu'] = \
+            HttpResponse(QuickbooksApi(request.user).app_menu())
+    return html
 
 @login_required
 def disconnect(request):
