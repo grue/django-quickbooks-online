@@ -16,6 +16,8 @@ AUTHORIZATION_URL = 'https://appcenter.intuit.com/Connect/Begin'
 @login_required
 def request_oauth_token(request):
     access_token_callback = settings.QUICKBOOKS['OAUTH_CALLBACK_URL']
+    if callable(access_token_callback):
+        access_token_callback = access_token_callback(request)
     quickbooks_oauth_hook = OAuthHook(consumer_key=settings.QUICKBOOKS['CONSUMER_KEY'],
                                       consumer_secret=settings.QUICKBOOKS['CONSUMER_SECRET'])
     response = requests.post(REQUEST_TOKEN_URL,
