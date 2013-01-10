@@ -60,7 +60,7 @@ def get_access_token(request):
     # Cache blue dot menu
     try:
         request.session['quickbooks:blue_dot_menu'] = None
-        blue_dot_menu(request)
+        #blue_dot_menu(request)
     except AttributeError:
         # Sessions framework isn't installed
         raise Exception('The sessions framework must be installed for this ' +
@@ -76,6 +76,7 @@ def blue_dot_menu(request):
     """
 
     html = request.session.get('quickbooks:blue_dot_menu')
+    html = None
     if not html:
         html = request.session['quickbooks:blue_dot_menu'] = \
             HttpResponse(QuickbooksApi(request.user).app_menu())

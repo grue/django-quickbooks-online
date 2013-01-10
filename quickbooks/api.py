@@ -160,7 +160,8 @@ class QuickbooksApi(object):
         return wrapper, root
 
     def _get(self, url, headers=None):
-        return self.session.get(url, headers=headers, verify=False)
+        r = self.session.get(url, headers=headers, verify=False)
+        return r
 
     def _post(self, url, body='', headers=None):
         return self.session.post(url, data=body, headers=headers, verify=False)
