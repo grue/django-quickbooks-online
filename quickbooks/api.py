@@ -23,6 +23,8 @@ QBD_NSMAP = {None: QB_NAMESPACE, 'xsi': XML_SCHEMA_INSTANCE, 'xsd': XML_SCHEMA}
 Q = "{%s}" % QB_NAMESPACE
 XSI = "{%s}" % XML_SCHEMA_INSTANCE
 
+from .utils import gettext
+from .utils import getel
 
 def camel2hyphen(name):
     s1 = re.sub('(.)([A-Z][a-z]+)', r'\1-\2', name)
@@ -42,6 +44,8 @@ def obj2xml(parent, params):
             elt = etree.SubElement(parent, Q + k)
             if k == 'Id':
                 elt.set('idDomain', 'NG')
+            elif k in ('CustomerId', 'ItemId'):
+                elt.set('idDomain', 'QB')
             if isinstance(v, bool):
                 val = {True: 'true', False: 'false'}[v]
             elif isinstance(v, datetime.date) or isinstance(v, datetime.datetime):
@@ -52,6 +56,7 @@ def obj2xml(parent, params):
     return parent
 
 def xml2obj(elt):
+    return elt
     if len(elt) == 0:
         return elt.text
     else:
@@ -90,13 +95,18 @@ class DuplicateItemError(ApiError):
 
 def api_error(response):
     if isinstance(response, requests.Response):
-        err = xml2obj(etree.fromstring(response.content))
+        err = response.content
     else:
         err = response
-    error_code = err.get('ErrorCode', 'BAD_REQUEST')
-    message = err.get('Message', err.get('ErrorDesc', ''))
-    cause = err.get('Cause', '')
-    db_error_code = err.get('DBErrorCode', '')
+    error_code = gettext(err, 'ErrorCode', default='BAD_REQUEST')
+    #error_code = err.get('ErrorCode', 'BAD_REQUEST')
+    message = gettext(err, 'Message', default=gettext(err, 'ErrorDesc',
+        default=''))
+    #message = err.get('Message', err.get('ErrorDesc', ''))
+    cause = gettext(err, 'Cause', default='')
+    #cause = err.get('Cause', '')
+    db_error_code = gettext(err, 'DBErrorCode', default='')
+    #db_error_code = err.get('DBErrorCode', '')
     err_msg = "%s: %s %s" % (error_code, cause, message)
 
     if str(error_code) in ['3200', '270'] or 'oauth_problem' in message:
@@ -198,9 +208,11 @@ class QuickbooksApi(object):
                     api_error(response)
                 except etree.XMLSyntaxError:
                     raise CommunicationError(response.content)
-            result = xml2obj(etree.fromstring(response.content))
-            if 'Error' in result:
-                api_error(result['Error'])
+            #result = xml2obj(etree.fromstring(response.content))
+            result = etree.fromstring(response.content)
+            err = getel(result, 'Error')
+            if err is not None:
+                api_error(err)
         except AuthenticationFailure:
             #self.token.user.quickbookstoken_set.all().delete()
             raise
@@ -213,27 +225,34 @@ class QuickbooksApi(object):
         return self._appcenter_request('Connection/Disconnect')
 
 
-    def create(self, object_name, params):
+    def create(self, object_name, elements):
         url_name = self._get_url_name(object_name, 'create')
         if self.data_source == 'QBO':
             root = etree.Element(object_name, nsmap=self.nsmap)
-            obj2xml(root, params)
+            data_root = root
         else:
             root, data_root = self._create_wrapped_qbd_root('Add', object_name)
-            obj2xml(data_root, params)
+        for el in elements:
+            data_root.append(el.to_lxml())
 
         result = self._qb_request(url_name, 'POST', xml=root)
 
         if self.data_source == 'QBD':
-            container = result['Success']
-            for k, v in container.items():
-                if k == object_name:
-                    return v
+            container = getel(result, 'Success')
+            res = getel(container, object_name)
+            if res is not None:
+                return res
             return container
         else:
             return result
 
     def read(self, object_name):
+        """ Get object data from Quickbooks.
+
+        :type  object_name: string
+        :param object_name: Type of object to return (e.g., "Customer")
+        """
+
         url_name = self._get_url_name(object_name, 'read')
         if self.data_source == 'QBO':
             results = []
