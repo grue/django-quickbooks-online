@@ -21,35 +21,27 @@ Installation
 4. Add a settings dictionary. OAUTH_CALLABACK_URL can be a string or
    callable. If it's a callable, it'll be passed the request context.:
 
-```python
-QUICKBOOKS = {
-    'CONSUMER_KEY': 'consumer_key_from_quickbooks',
-    'CONSUMER_SECRET': 'consumer_secret_from_quickbooks',
-    'OAUTH_CALLBACK_URL': string_or_callable,
-    'ACCESS_COMPLETE_URL': string
-}
-```
+       QUICKBOOKS = {
+            'CONSUMER_KEY': 'consumer_key_from_quickbooks',
+            'CONSUMER_SECRET': 'consumer_secret_from_quickbooks',
+            'OAUTH_CALLBACK_URL': string_or_callable,
+            'ACCESS_COMPLETE_URL': string
+        }
 
 5. Add the setup javascript (example below assumes your namespace is
    'quickbooks' and that you have a template context variable 'base_url' (e.g.,
    http://example.com):
 
-```html
-<script type="text/javascript" src="https://appcenter.intuit.com/Content/IA/intuit.ipp.anywhere.js"></script>
-<script>intuit.ipp.anywhere.setup({
-    menuProxy: '{{ base_url }}{% url quickbooks:quickbooks.views.blue_dot_menu %}',
-    grantUrl: '{{ base_url }}{% url quickbooks:quickbooks.views.request_oauth_token %}'
-});</script>
-```
+        <script type="text/javascript" src="https://appcenter.intuit.com/Content/IA/intuit.ipp.anywhere.js"></script>
+        <script>intuit.ipp.anywhere.setup({
+            menuProxy: '{{ base_url }}{% url quickbooks:quickbooks.views.blue_dot_menu %}',
+            grantUrl: '{{ base_url }}{% url quickbooks:quickbooks.views.request_oauth_token %}'
+        });</script>
 
 6. Add the connect button HTML (perhaps in user preferences):
 
-```html
-<ipp:connectToIntuit><ipp:connectToIntuit/>
-```
+        <ipp:connectToIntuit><ipp:connectToIntuit/>
 
 7. Add the blue dot menu HTML (must be visible on every page once connected):
 
-```html
-<ipp:blueDot></ipp:blueDot>
-```
+        <ipp:blueDot></ipp:blueDot>
