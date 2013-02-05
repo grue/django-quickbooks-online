@@ -2,8 +2,10 @@ import urllib
 import re
 import uuid
 import datetime
+import sys
 from lxml import etree
 import requests
+
 from oauth_hook import OAuthHook
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -133,6 +135,7 @@ class QuickbooksApi(object):
                          header_auth=True)
         self.session = requests.session(hooks={'pre_request': hook})
         self.realm_id = token.realm_id
+        print(token.realm_id)
         self.data_source = token.data_source
         self.url_base = {'QBD': QUICKBOOKS_WINDOWS_URL_BASE, 'QBO': QUICKBOOKS_ONLINE_URL_BASE}[token.data_source]
         self.nsmap = {'QBD': QBD_NSMAP, 'QBO': QBO_NSMAP}[token.data_source]
@@ -152,9 +155,11 @@ class QuickbooksApi(object):
             return base + 's'
         return base
 
-    def _create_wrapped_qbd_root(self, action, object_name=None, request_and_realm_ids=True):
-        wrapper = etree.Element(action, nsmap=self.nsmap)
-        wrapper.set(XSI + 'schemaLocation', 'http://www.intuit.com/sb/cdm/V2./RestDataFilter.xsd ')
+    def _create_wrapped_qbd_root(self, action, object_name=None,
+    request_and_realm_ids=True, nsmap=None):
+        wrapper = etree.Element(action, nsmap=(nsmap or self.nsmap))
+        if not nsmap:
+            wrapper.set(XSI + 'schemaLocation', 'http://www.intuit.com/sb/cdm/V2./RestDataFilter.xsd ')
         if request_and_realm_ids:
             wrapper.set('RequestId', uuid.uuid4().hex)
             wrapper.set('FullResponse', 'true')
@@ -180,42 +185,49 @@ class QuickbooksApi(object):
         full_url = APPCENTER_URL_BASE + url
         return self._get(full_url).content
 
-    def _qb_request(self, object_name, method='GET', object_id=None, xml=None, body_dict=None, **kwargs):
+    def _qb_request(self, object_name, method='GET', object_id=None, xml=None,
+    body_dict=None, retries=3, **kwargs):
         url = "%s%s/%s/%s" % (self.url_base, object_name, DATA_SERVICES_VERSION, self.realm_id)
         if object_id:
             url += '/%s' % object_id
         if kwargs:
             url = "%s?%s" % (url, urllib.urlencode(kwargs))
-        if method == 'GET':
-            response = self._get(url)
-        else:
-            if xml is not None:
-                body = etree.tostring(xml, xml_declaration=True, encoding='utf-8', pretty_print=True)
-                response = self._post(url, body, headers={'Content-Type': self.xml_content_type})
-            elif body_dict is not None:
-                response = self._post(url, body_dict, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        last_err = None
+        for retry_i in range(retries + 1):
+            print('trying')
+            last_err = None
+            if method == 'GET':
+                response = self._get(url)
             else:
-                response = self._post(url, headers={'Content-Type': 'application/x-www-form-urlencoded'})
-        try:
-            if response.status_code == 500 and 'errorCode=006003' in response.content:
-                # QB appears to randomly throw 500 errors once and a while. Awesome.
-                raise TryLaterError()
-            if response.status_code == 401:
-                # Token has expired. Delete all tokens for this user
-                raise AuthenticationFailure()
-            if response.status_code != 200:
-                try:
-                    api_error(response)
-                except etree.XMLSyntaxError:
-                    raise CommunicationError(response.content)
-            #result = xml2obj(etree.fromstring(response.content))
-            result = etree.fromstring(response.content)
-            err = getel(result, 'Error')
-            if err is not None:
-                api_error(err)
-        except AuthenticationFailure:
-            #self.token.user.quickbookstoken_set.all().delete()
-            raise
+                if xml is not None:
+                    body = etree.tostring(xml, xml_declaration=True, encoding='utf-8', pretty_print=True)
+                    response = self._post(url, body, headers={'Content-Type': self.xml_content_type})
+                elif body_dict is not None:
+                    response = self._post(url, body_dict, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+                else:
+                    response = self._post(url, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+            try:
+                if response.status_code == 500 and 'errorCode=006003' in response.content:
+                    # QB appears to randomly throw 500 errors once and a while. Awesome.
+                    last_err = TryLaterError()
+                if response.status_code == 401:
+                    # Token has expired. Delete all tokens for this user
+                    raise AuthenticationFailure()
+                if response.status_code != 200:
+                    try:
+                        api_error(response)
+                    except etree.XMLSyntaxError:
+                        raise CommunicationError(response.content)
+                result = etree.fromstring(response.content)
+                err = getel(result, 'Error')
+                if err is not None:
+                    api_error(err)
+            except AuthenticationFailure as err:
+                last_err = err
+            if last_err is None:
+                break
+        if last_err:
+            raise last_err.__class__ (str(last_err)), None, sys.exc_info()[2]
         return result
 
     def app_menu(self):
@@ -225,7 +237,7 @@ class QuickbooksApi(object):
         return self._appcenter_request('Connection/Disconnect')
 
 
-    def create(self, object_name, elements):
+    def create(self, object_name, elements, retries=3):
         url_name = self._get_url_name(object_name, 'create')
         if self.data_source == 'QBO':
             root = etree.Element(object_name, nsmap=self.nsmap)
@@ -235,7 +247,7 @@ class QuickbooksApi(object):
         for el in elements:
             data_root.append(el.to_lxml())
 
-        result = self._qb_request(url_name, 'POST', xml=root)
+        result = self._qb_request(url_name, 'POST', xml=root, retries=retries)
 
         if self.data_source == 'QBD':
             container = getel(result, 'Success')
@@ -246,7 +258,21 @@ class QuickbooksApi(object):
         else:
             return result
 
-    def read(self, object_name):
+    def filter(self, object_name, elements, retries=3):
+        url_name = self._get_url_name(object_name, 'filter')
+        if self.data_source == 'QBO':
+            raise NotImplementedError(
+                'QB Online filtering is not supported at this time')
+        else:
+            root, data_root = self._create_wrapped_qbd_root(
+                '%sQuery' % object_name, None,
+                request_and_realm_ids=False,
+                nsmap={None:self.nsmap[None]})
+            [root.append(el.to_lxml()) for el in elements]
+            return self._qb_request(url_name, 'POST', xml=root)
+
+
+    def read(self, object_name, retries=0):
         """ Get object data from Quickbooks.
 
         :type  object_name: string
@@ -259,7 +285,9 @@ class QuickbooksApi(object):
             count = 100
             page = 1
             while count == 100:
-                these_results = self._qb_request(url_name, 'POST', body_dict={'PageNum': str(page), 'ResultsPerPage': '100'})
+                these_results = self._qb_request(
+                    url_name, 'POST', body_dict={'PageNum': str(page),
+                    'ResultsPerPage': '100'}, retries=retries)
                 count = int(these_results['Count'])
                 if count == 1:
                     results += [these_results['CdmCollections'][object_name]]
@@ -268,7 +296,7 @@ class QuickbooksApi(object):
                 page += 1
             return results
         else:
-            return self._qb_request(url_name, 'GET')
+            return self._qb_request(url_name, 'GET', retries=retries)
 
     def get(self, object_name, object_id):
         url_name = self._get_url_name(object_name, 'get')
@@ -277,17 +305,19 @@ class QuickbooksApi(object):
         else:
             return self._qb_request(url_name, 'GET', object_id=object_id, idDomain='NG')
 
-    def update(self, object_name, params):
+    def update(self, object_name, params, retries=3):
         object_id = params['Id']
         url_name = self._get_url_name(object_name, 'update')
         if self.data_source == 'QBO':
             root = etree.Element(object_name, nsmap=self.nsmap)
             obj2xml(root, params)
-            return self._qb_request(url_name, 'POST', object_id=object_id, xml=root)
+            return self._qb_request(url_name, 'POST', object_id=object_id,
+                xml=root, retries=retries)
         else:
             root, data_root = self._create_wrapped_qbd_root('Mod', object_name)
             obj2xml(data_root, params)
-            result = self._qb_request(url_name, 'POST', xml=root)
+            result = self._qb_request(url_name, 'POST', xml=root,
+                retries=retries)
 
             container = result['Success']
             for k, v in container.items():
@@ -295,17 +325,18 @@ class QuickbooksApi(object):
                     return v
             return container
 
-    def delete(self, object_name, params):
+    def delete(self, object_name, params, retries=3):
         object_id = params['Id']
         url_name = self._get_url_name(object_name, 'delete')
         if self.data_source == 'QBO':
             root = etree.Element(object_name, nsmap=self.nsmap)
             obj2xml(root, params)
-            return self._qb_request(url_name, 'POST', object_id=object_id, xml=root, methodx='delete')
+            return self._qb_request(url_name, 'POST', object_id=object_id,
+                xml=root, methodx='delete', retries=retries)
         else:
             root, data_root = self._create_wrapped_qbd_root('Del', object_name)
             obj2xml(data_root, params)
-            return self._qb_request(url_name, 'POST', xml=root)
+            return self._qb_request(url_name, 'POST', xml=root, retries=retries)
 
     def search(self, object_name, params):
         url_name = self._get_url_name(object_name, 'read')
