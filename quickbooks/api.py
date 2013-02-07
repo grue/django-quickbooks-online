@@ -181,9 +181,31 @@ class QuickbooksApi(object):
     def _post(self, url, body='', headers=None):
         return self.session.post(url, data=body, headers=headers, verify=False)
 
-    def _appcenter_request(self, url):
+    def _appcenter_request(self, url, retries=3):
         full_url = APPCENTER_URL_BASE + url
-        return self._get(full_url).content
+
+        for retry_i in range(retries+1):
+            content = self._get(full_url).content
+
+            try:
+                el = etree.fromstring(content)
+            except etree.XMLSyntaxError:
+                return content
+
+            try:
+                ns = el.nsmap[None]
+                err_code = gettext(el, 'ErrorCode', ns=ns)
+                err_msg = gettext(el, 'ErrorMessage', ns=ns)
+                if err_code == '22':
+                    # The API returns this sometimes even when the user is
+                    # authenticated.
+                    if retry_i < retries:
+                        continue
+                raise AuthenticationFailure(err_msg)
+            except TagNotFound:
+                break
+
+        return content
 
     def _qb_request(self, object_name, method='GET', object_id=None, xml=None,
     body_dict=None, retries=3, **kwargs):
@@ -244,12 +266,11 @@ class QuickbooksApi(object):
             raise last_err.__class__ (str(last_err)), None, sys.exc_info()[2]
         return result
 
-    def app_menu(self):
-        return self._appcenter_request('Account/AppMenu')
+    def app_menu(self, retries=3):
+        return self._appcenter_request('Account/AppMenu', retries=retries)
 
     def disconnect(self):
         return self._appcenter_request('Connection/Disconnect')
-
 
     def create(self, object_name, elements, retries=3):
         url_name = self._get_url_name(object_name, 'create')

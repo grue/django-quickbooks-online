@@ -62,7 +62,6 @@ def get_access_token(request):
         request.session['quickbooks:blue_dot_menu'] = None
         #blue_dot_menu(request)
     except AttributeError:
-        # Sessions framework isn't installed
         raise Exception('The sessions framework must be installed for this ' +
             'application to work.')
 

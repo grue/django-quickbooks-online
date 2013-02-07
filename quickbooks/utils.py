@@ -3,17 +3,22 @@ from lxml import etree
 
 from .exceptions import TagNotFound
 
-def get_tag_with_ns(tag_name):
+def get_tag_with_ns(tag_name, ns=None):
     from .api import QB_NAMESPACE
 
-    return '{%s}%s' % (QB_NAMESPACE, tag_name)
+    ns = ns or QB_NAMESPACE
+    return '{%s}%s' % (ns, tag_name)
 
-def getel(elt, tag_name):
+def getel(elt, tag_name, ns=None):
     """ Gets the first tag that matches the specified tag_name taking into
     account the QB namespace.
+
+    :param ns: The namespace to use if not using the default one for
+    django-quickbooks.
+    :type  ns: string
     """
 
-    res = elt.find(get_tag_with_ns(tag_name))
+    res = elt.find(get_tag_with_ns(tag_name, ns=ns))
     if res is None:
         raise TagNotFound('Could not find tag by name "%s"' % tag_name)
     return res
@@ -54,10 +59,15 @@ def gettext(elt, tag_name, include_domain=True, **kwargs):
     :param val_type: If specified, function will try to coerce text into the
     specified class. Currently only datetime.datetime and bool are supported.
     :type  val_type: Any type
+
+    :param ns: The namespace to use if not using the default one for
+    django-quickbooks.
+    :type  ns: string
     """
 
+    ns = kwargs.get('ns', None)
     try:
-        el = getel(elt, tag_name)
+        el = getel(elt, tag_name, ns=ns)
     except TagNotFound:
         if 'default' in kwargs: return kwargs['default']
         raise
