@@ -25,6 +25,7 @@ QBD_NSMAP = {None: QB_NAMESPACE, 'xsi': XML_SCHEMA_INSTANCE, 'xsd': XML_SCHEMA}
 Q = "{%s}" % QB_NAMESPACE
 XSI = "{%s}" % XML_SCHEMA_INSTANCE
 
+from .exceptions import TagNotFound
 from .utils import gettext
 from .utils import getel
 
@@ -135,7 +136,6 @@ class QuickbooksApi(object):
                          header_auth=True)
         self.session = requests.session(hooks={'pre_request': hook})
         self.realm_id = token.realm_id
-        print(token.realm_id)
         self.data_source = token.data_source
         self.url_base = {'QBD': QUICKBOOKS_WINDOWS_URL_BASE, 'QBO': QUICKBOOKS_ONLINE_URL_BASE}[token.data_source]
         self.nsmap = {'QBD': QBD_NSMAP, 'QBO': QBO_NSMAP}[token.data_source]
@@ -194,7 +194,6 @@ class QuickbooksApi(object):
             url = "%s?%s" % (url, urllib.urlencode(kwargs))
         last_err = None
         for retry_i in range(retries + 1):
-            print('trying')
             last_err = None
             if method == 'GET':
                 response = self._get(url)
@@ -219,7 +218,10 @@ class QuickbooksApi(object):
                     except etree.XMLSyntaxError:
                         raise CommunicationError(response.content)
                 result = etree.fromstring(response.content)
-                err = getel(result, 'Error')
+                try:
+                    err = getel(result, 'Error')
+                except TagNotFound:
+                    err = None
                 if err is not None:
                     api_error(err)
             except AuthenticationFailure as err:
@@ -245,7 +247,7 @@ class QuickbooksApi(object):
         else:
             root, data_root = self._create_wrapped_qbd_root('Add', object_name)
         for el in elements:
-            data_root.append(el.to_lxml())
+            data_root.append(el)
 
         result = self._qb_request(url_name, 'POST', xml=root, retries=retries)
 
@@ -268,11 +270,11 @@ class QuickbooksApi(object):
                 '%sQuery' % object_name, None,
                 request_and_realm_ids=False,
                 nsmap={None:self.nsmap[None]})
-            [root.append(el.to_lxml()) for el in elements]
+            [root.append(el) for el in elements]
             return self._qb_request(url_name, 'POST', xml=root)
 
 
-    def read(self, object_name, retries=0):
+    def read(self, object_name, retries=3):
         """ Get object data from Quickbooks.
 
         :type  object_name: string
@@ -298,32 +300,30 @@ class QuickbooksApi(object):
         else:
             return self._qb_request(url_name, 'GET', retries=retries)
 
-    def get(self, object_name, object_id):
+    def get(self, object_name, object_id, id_domain='NG'):
         url_name = self._get_url_name(object_name, 'get')
         if self.data_source == 'QBO':
             return self._qb_request(url_name, 'GET', object_id=object_id)
         else:
-            return self._qb_request(url_name, 'GET', object_id=object_id, idDomain='NG')
+            return self._qb_request(url_name, 'GET', object_id=object_id,
+                idDomain=id_domain)
 
     def update(self, object_name, params, retries=3):
-        object_id = params['Id']
         url_name = self._get_url_name(object_name, 'update')
         if self.data_source == 'QBO':
             root = etree.Element(object_name, nsmap=self.nsmap)
-            obj2xml(root, params)
+            root.append(params)
             return self._qb_request(url_name, 'POST', object_id=object_id,
                 xml=root, retries=retries)
         else:
             root, data_root = self._create_wrapped_qbd_root('Mod', object_name)
-            obj2xml(data_root, params)
+            for param in params:
+                data_root.append(param)
             result = self._qb_request(url_name, 'POST', xml=root,
                 retries=retries)
 
-            container = result['Success']
-            for k, v in container.items():
-                if k == object_name:
-                    return v
-            return container
+            container = getel(result, 'Success')
+            return getel(container, object_name)
 
     def delete(self, object_name, params, retries=3):
         object_id = params['Id']

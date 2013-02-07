@@ -1,6 +1,8 @@
 import datetime
 from lxml import etree
 
+from .exceptions import TagNotFound
+
 def get_tag_with_ns(tag_name):
     from .api import QB_NAMESPACE
 
@@ -11,7 +13,10 @@ def getel(elt, tag_name):
     account the QB namespace.
     """
 
-    return elt.find(get_tag_with_ns(tag_name))
+    res = elt.find(get_tag_with_ns(tag_name))
+    if res is None:
+        raise TagNotFound('Could not find tag by name "%s"' % tag_name)
+    return res
 
 def getels(elt, *path):
     """ Gets the first set of elements found at the specified path.
@@ -31,6 +36,7 @@ def getels(elt, *path):
         [<Element item>, <Element item>]
     """
 
+    i=-1
     for i in range(len(path)-1):
         elt = getel(elt, path[i])
     tag_name = path[i+1]
@@ -40,14 +46,54 @@ def gettext(elt, tag_name, include_domain=True, **kwargs):
     """ Gets the text value of the specified tag. In the case that idDomain is
     specified as an attribute, the return value combines the domain and text
     value separated by a colon (e.g., "QB:5")
+
+    :param default: The value to return if the tag isn't found or if the tag
+    doesn't have text.
+    :type  default: Any type
+
+    :param val_type: If specified, function will try to coerce text into the
+    specified class. Currently only datetime.datetime and bool are supported.
+    :type  val_type: Any type
     """
 
-    el = getel(elt, tag_name)
-    if el is None and 'default' in kwargs:
-        return kwargs['default']
+    try:
+        el = getel(elt, tag_name)
+    except TagNotFound:
+        if 'default' in kwargs: return kwargs['default']
+        raise
     if 'idDomain' in el.attrib:
         return '%s:%s' % (el.get('idDomain'), el.text)
     return el.text
+
+def settext(elt, *args):
+    """ Sets the text attribute of the specified tag. If args has only one
+    element, it is assumed to be the value. If args has more than one elemnts,
+    getel or getels is used on all but the last element to get the element for
+    which the text attribute will be changed.
+    """
+
+    if len(args) == 0:
+        raise AttributeError("Expecing at least 2 arguments")
+    elif len(args) == 1:
+        val = args[0]
+        els = [elt]
+    elif len(args) == 2:
+        els = [getel(elt, args[0])]
+        val = args[1]
+    else:
+        val = args[len(args)-1]
+        els = getels(elt, *args[0:len(args)-2])
+
+    for el in els:
+        if isinstance(val, bool):
+            el.text = 'true' if val else 'false'
+        elif (isinstance(val, datetime.date) or
+        isinstance(val, datetime.datetime)):
+            el.text = val.isoformat()
+        else:
+            # Not sure that " needs to be replaced by ', but that's how it
+            # functioned previous to the refactoring.
+            el.text = unicode(val).replace('"', "'")
 
 class E(object):
     """ Provides an easy and quick way to build XML.
@@ -71,15 +117,8 @@ class E(object):
         for element in self.elements:
             if isinstance(element, E):
                 top.append(element.to_lxml())
-            elif isinstance(element, bool):
-                top.text = 'true' if element else 'false'
-            elif isinstance(element, datetime.date) or isinstance(element,
-            datetime.datetime):
-                top.text = element.isoformat()
             else:
-                # Not sure that " needs to be replaced by ', but that's how it
-                # functioned previous to the refactoring.
-                top.text = unicode(element).replace('"', "'")
+                settext(top, element)
         return top
 
     def to_string(self):
