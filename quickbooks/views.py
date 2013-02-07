@@ -75,7 +75,6 @@ def blue_dot_menu(request):
     """
 
     html = request.session.get('quickbooks:blue_dot_menu')
-    html = None
     if not html:
         html = request.session['quickbooks:blue_dot_menu'] = \
             HttpResponse(QuickbooksApi(request.user).app_menu())
