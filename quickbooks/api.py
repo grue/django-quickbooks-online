@@ -200,7 +200,19 @@ class QuickbooksApi(object):
             else:
                 if xml is not None:
                     body = etree.tostring(xml, xml_declaration=True, encoding='utf-8', pretty_print=True)
+                    """
+                    print("\n\n\n\n")
+                    print("***** Request *****")
+                    print(body)
+                    """
                     response = self._post(url, body, headers={'Content-Type': self.xml_content_type})
+                    """
+                    print("\n\n\n\n***** Response *****")
+                    print(etree.tostring(etree.fromstring(response.content),
+                        pretty_print=True))
+                    print("\n\n\n\n")
+                    """
+
                 elif body_dict is not None:
                     response = self._post(url, body_dict, headers={'Content-Type': 'application/x-www-form-urlencoded'})
                 else:
