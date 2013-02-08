@@ -1,5 +1,7 @@
+import logging
 import urlparse
 import requests
+
 from oauth_hook import OAuthHook
 from django.http import HttpResponse, HttpResponseRedirect
 from django.conf import settings
@@ -23,12 +25,18 @@ def request_oauth_token(request):
     response = requests.post(REQUEST_TOKEN_URL,
                              params={'oauth_callback': access_token_callback},
                              hooks={'pre_request': quickbooks_oauth_hook})
-    qs = urlparse.parse_qs(response.text)
-    request_token = qs['oauth_token'][0]
-    request_token_secret = qs['oauth_token_secret'][0]
+    try:
+        qs = urlparse.parse_qs(response.text)
+        request_token = qs['oauth_token'][0]
+        request_token_secret = qs['oauth_token_secret'][0]
 
-    request.session['qb_oauth_token'] = request_token
-    request.session['qb_oauth_token_secret'] = request_token_secret
+        request.session['qb_oauth_token'] = request_token
+        request.session['qb_oauth_token_secret'] = request_token_secret
+    except:
+        logger = logging.getLogger('quickbooks.views.request_oauth_token')
+        logger.exception(("Couldn't extract oAuth parameters from token " +
+            "request response. Response was '%s'"), response.content)
+        raise
     return HttpResponseRedirect("%s?oauth_token=%s" % (AUTHORIZATION_URL, request_token))
 
 
