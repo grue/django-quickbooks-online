@@ -196,6 +196,8 @@ class QuickbooksApi(object):
                 ns = el.nsmap[None]
                 err_code = gettext(el, 'ErrorCode', ns=ns)
                 err_msg = gettext(el, 'ErrorMessage', ns=ns)
+                if err_code == '0':
+                    return content
                 if err_code == '22':
                     # The API returns this sometimes even when the user is
                     # authenticated.
