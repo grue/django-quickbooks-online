@@ -14,9 +14,14 @@ REQUEST_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_request_token'
 ACCESS_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_access_token'
 AUTHORIZATION_URL = 'https://appcenter.intuit.com/Connect/Begin'
 
+BLUE_DOT_CACHE_KEY = 'quickbooks:blue_dot_menu'
 
 @login_required
 def request_oauth_token(request):
+    # We'll require a refresh in the blue dot cache
+    if BLUE_DOT_CACHE_KEY in request.session:
+        del request.session[BLUE_DOT_CACHE_KEY]
+
     access_token_callback = settings.QUICKBOOKS['OAUTH_CALLBACK_URL']
     if callable(access_token_callback):
         access_token_callback = access_token_callback(request)
@@ -67,7 +72,7 @@ def get_access_token(request):
 
     # Cache blue dot menu
     try:
-        request.session['quickbooks:blue_dot_menu'] = None
+        request.session[BLUE_DOT_CACHE_KEY] = None
         #blue_dot_menu(request)
     except AttributeError:
         raise Exception('The sessions framework must be installed for this ' +
@@ -82,9 +87,9 @@ def blue_dot_menu(request):
     """ Returns the blue dot menu. If possible a cached copy is returned.
     """
 
-    html = request.session.get('quickbooks:blue_dot_menu')
+    html = request.session.get(BLUE_DOT_CACHE_KEY)
     if not html:
-        html = request.session['quickbooks:blue_dot_menu'] = \
+        html = request.session[BLUE_DOT_CACHE_KEY] = \
             HttpResponse(QuickbooksApi(request.user).app_menu())
     return html
 
