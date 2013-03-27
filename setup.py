@@ -9,7 +9,7 @@ setup(
 
     packages = find_packages(),
 
-    install_requires = ['requests', 'requests-oauth', 'lxml'],
+    install_requires = ['requests==0.14.2', 'requests-oauth', 'lxml'],
     include_package_data = True,
 
     # metadata for upload to PyPI
