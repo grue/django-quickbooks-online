@@ -1,6 +1,10 @@
+
+
 ==========================================================================================
 django-quickbooks - An app for communicating with Quickbooks via Intuit Anywhere
 ==========================================================================================
+
+[![Build Status](https://travis-ci.org/grue/django-quickbooks.png)](https://travis-ci.org/grue/django-quickbooks)
 
 django-quickbooks handles communicating with the Intuit Anywhere API. Using
 this app, you can perform CRUD operations on any of the object classes
