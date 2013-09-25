@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render_to_response
 from quickbooks.models import QuickbooksToken, get_quickbooks_token
 from quickbooks.api import QuickbooksApi
+from quickbooks.signals import qb_connected
 
 REQUEST_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_request_token'
 ACCESS_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_access_token'
@@ -63,7 +64,7 @@ def get_access_token(request):
     # Delete any existing access tokens
     request.user.quickbookstoken_set.all().delete()
 
-    QuickbooksToken.objects.create(
+    token = QuickbooksToken.objects.create(
         user = request.user,
         access_token = data['oauth_token'][0],
         access_token_secret = data['oauth_token_secret'][0],
@@ -73,10 +74,13 @@ def get_access_token(request):
     # Cache blue dot menu
     try:
         request.session[BLUE_DOT_CACHE_KEY] = None
-        #blue_dot_menu(request)
+        blue_dot_menu(request)
     except AttributeError:
         raise Exception('The sessions framework must be installed for this ' +
             'application to work.')
+
+    # Let everyone else know we conneted
+    qb_connected.send(None, token=token)
 
     return render_to_response('oauth_callback.html',
                               {'complete_url': settings.QUICKBOOKS['ACCESS_COMPLETE_URL']})
