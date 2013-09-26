@@ -1,5 +1,4 @@
 
-
 ==========================================================================================
 django-quickbooks - An app for communicating with Quickbooks via Intuit Anywhere
 ==========================================================================================
@@ -32,7 +31,17 @@ Installation
             'ACCESS_COMPLETE_URL': string
         }
 
-5. Add the setup javascript (example below assumes your namespace is
+5. You'll need to set up you Keyczar keychain now:
+   
+        mkdir /path/to/keys
+        python keyczart create --location=/path/to/keys --purpose=crypt --name="A name"
+        python keyczart addkey --location=/path/to/keys --status=primary
+
+6. Now add the key dir to your settings file:  
+
+        ENCRYPTED_FIELD_KEYS_DIR = "/path/to/keys"
+
+7. Add the setup javascript (example below assumes your namespace is
    'quickbooks' and that you have a template context variable 'base_url' (e.g.,
    http://example.com):
 
@@ -42,10 +51,10 @@ Installation
             grantUrl: '{{ base_url }}{% url quickbooks:quickbooks.views.request_oauth_token %}'
         });</script>
 
-6. Add the connect button HTML (perhaps in user preferences):
+9. Add the connect button HTML (perhaps in user preferences):
 
-        <ipp:connectToIntuit><ipp:connectToIntuit/>
+        <ipp:connectToIntuit></ipp:connectToIntuit>
 
-7. Add the blue dot menu HTML (must be visible on every page once connected):
+8. Add the blue dot menu HTML (must be visible on every page once connected):
 
         <ipp:blueDot></ipp:blueDot>
