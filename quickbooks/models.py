@@ -1,10 +1,11 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django_extensions.db.fields.encrypted import EncryptedCharField
 
 class QuickbooksToken(models.Model):
     user = models.ForeignKey(User)
-    access_token = models.CharField(max_length=64)
-    access_token_secret = models.CharField(max_length=64)
+    access_token = EncryptedCharField(max_length=255)
+    access_token_secret = EncryptedCharField(max_length=255)
     realm_id = models.CharField(max_length=64)
     data_source = models.CharField(max_length=10)
 
