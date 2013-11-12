@@ -1,4 +1,4 @@
-from django.conf.urls.defaults import *
+from django.conf.urls import *
 
 urlpatterns = patterns('quickbooks.views',
     (r'^request_oauth_token/?$',    'request_oauth_token'),
