@@ -8,7 +8,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render_to_response
 from quickbooks.models import QuickbooksToken, get_quickbooks_token
-from quickbooks.api import QuickbooksApi
+from quickbooks.api import QuickbooksApi, AuthenticationFailure
 from quickbooks.signals import qb_connected
 
 REQUEST_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_request_token'
@@ -99,7 +99,16 @@ def blue_dot_menu(request):
 
 @login_required
 def disconnect(request):
+    """ Try to disconnect from Intuit, then destroy our tokens."""
+
     token = get_quickbooks_token(request)
-    QuickbooksApi(token).disconnect()
+    try:
+        QuickbooksApi(token).disconnect()
+    except AuthenticationFailure:
+        # If there is an authentication error, then these tokens are bad
+        # We need to destroy them in any case.
+        pass
+
     request.user.quickbookstoken_set.all().delete()
     return HttpResponseRedirect(settings.QUICKBOOKS['ACCESS_COMPLETE_URL'])
+
