@@ -172,17 +172,23 @@ class QuickbooksV3Api(object):
         constructed_url = "{}/company/{}/query?query={}".format(self.url_base, self.realm_id, urllib.quote(query))
         return self.session.get(constructed_url.lower()).json()
 
-    def create(self):
+    def create(self, object_type, object_body):
         # [todo] - add error handling for v3 create
-        raise Exception("Not implemented yet")
+        # [todo] - validate that the object_body is a proper json blob
+        constructed_url = "{}/company/{}/{}".format(self.url_base, self.realm_id, object_type)
+        return self.session.post(constructed_url.lower(), object_body).json()
 
-    def delete(self):
+    def delete(self, object_type, object_body):
         # [todo] - add error handling for v3 delete
-        raise Exception("Not implemented yet")
+        # [todo] - validate that the object_body is a proper json blob
+        constructed_url = "{}/company/{}/{}?operation=delete".format(self.url_base, self.realm_id, object_type)
+        return self.session.post(constructed_url.lower(), object_body).json()
 
-    def update(self):
+    def update(self, object_type, object_body):
         # [todo] - add error handling for v3 update
-        raise Exception("Not implemented yet")
+        # [todo] - validate that the object_body is a proper json blob
+        constructed_url = "{}/company/{}/{}?operation=update".format(self.url_base, self.realm_id, object_type)
+        return self.session.post(constructed_url.lower(), object_body).json()
 
 class QuickbooksApi(object):
     """ This has been deprecated, and only works reliably with QBD. Use at your own risk. """
