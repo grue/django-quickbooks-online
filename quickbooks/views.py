@@ -2,7 +2,7 @@ import logging
 import urlparse
 import requests
 
-from oauth_hook import OAuthHook
+from requests_oauthlib import OAuth1Session
 from django.http import HttpResponse, HttpResponseRedirect
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -26,48 +26,53 @@ def request_oauth_token(request):
     access_token_callback = settings.QUICKBOOKS['OAUTH_CALLBACK_URL']
     if callable(access_token_callback):
         access_token_callback = access_token_callback(request)
-    quickbooks_oauth_hook = OAuthHook(consumer_key=settings.QUICKBOOKS['CONSUMER_KEY'],
-                                      consumer_secret=settings.QUICKBOOKS['CONSUMER_SECRET'])
-    response = requests.post(REQUEST_TOKEN_URL,
-                             params={'oauth_callback': access_token_callback},
-                             hooks={'pre_request': quickbooks_oauth_hook})
+
+    session = OAuth1Session(client_key=settings.QUICKBOOKS['CONSUMER_KEY'],
+                            client_secret=settings.QUICKBOOKS['CONSUMER_SECRET'],
+                            callback_uri=access_token_callback)
+
+    response = session.fetch_request_token(REQUEST_TOKEN_URL)
+
     try:
-        qs = urlparse.parse_qs(response.text)
-        request_token = qs['oauth_token'][0]
-        request_token_secret = qs['oauth_token_secret'][0]
+        request_token = response['oauth_token']
+        request_token_secret = response['oauth_token_secret']
 
         request.session['qb_oauth_token'] = request_token
         request.session['qb_oauth_token_secret'] = request_token_secret
     except:
         logger = logging.getLogger('quickbooks.views.request_oauth_token')
         logger.exception(("Couldn't extract oAuth parameters from token " +
-            "request response. Response was '%s'"), response.content)
+            "request response. Response was '%s'"), response)
         raise
     return HttpResponseRedirect("%s?oauth_token=%s" % (AUTHORIZATION_URL, request_token))
 
 
 @login_required
 def get_access_token(request):
-    realm_id = request.GET.get('realmId')
-    data_source = request.GET.get('dataSource')
-    oauth_verifier = request.GET.get('oauth_verifier')
+    # [todo] - add doc string for get_access_token
+    session = OAuth1Session(client_key=settings.QUICKBOOKS['CONSUMER_KEY'],
+                            client_secret=settings.QUICKBOOKS['CONSUMER_SECRET'],
+                            resource_owner_key=request.session['qb_oauth_token'],
+                            resource_owner_secret=request.session['qb_oauth_token_secret'])
 
-    quickbooks_oauth_hook = OAuthHook(request.session['qb_oauth_token'],
-                                      request.session['qb_oauth_token_secret'],
-                                      settings.QUICKBOOKS['CONSUMER_KEY'],
-                                      settings.QUICKBOOKS['CONSUMER_SECRET'])
-    response = requests.post(ACCESS_TOKEN_URL,
-                             {'oauth_verifier': oauth_verifier},
-                             hooks={'pre_request': quickbooks_oauth_hook})
-    data = urlparse.parse_qs(response.content)
+    remote_response = session.parse_authorization_response('?{}'.format(request.META.get('QUERY_STRING')))
+    m =  session.auth.client.__dict__
+    realm_id = remote_response['realmId']
+    data_source = remote_response['dataSource']
+    oauth_verifier = remote_response['oauth_verifier']
+
+    # [review] - Possible bug? This should be taken care of by session.parse_authorization_response
+    session.auth.client.verifier = unicode(oauth_verifier)
+
+    response = session.fetch_access_token(ACCESS_TOKEN_URL)
 
     # Delete any existing access tokens
     request.user.quickbookstoken_set.all().delete()
 
     token = QuickbooksToken.objects.create(
         user = request.user,
-        access_token = data['oauth_token'][0],
-        access_token_secret = data['oauth_token_secret'][0],
+        access_token = response['oauth_token'],
+        access_token_secret = response['oauth_token_secret'],
         realm_id = realm_id,
         data_source = data_source)
 
@@ -111,4 +116,3 @@ def disconnect(request):
 
     request.user.quickbookstoken_set.all().delete()
     return HttpResponseRedirect(settings.QUICKBOOKS['ACCESS_COMPLETE_URL'])
-
