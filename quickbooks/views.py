@@ -1,6 +1,4 @@
 import logging
-import urlparse
-import requests
 
 from requests_oauthlib import OAuth1Session
 from django.http import HttpResponse, HttpResponseRedirect
@@ -16,6 +14,7 @@ ACCESS_TOKEN_URL = 'https://oauth.intuit.com/oauth/v1/get_access_token'
 AUTHORIZATION_URL = 'https://appcenter.intuit.com/Connect/Begin'
 
 BLUE_DOT_CACHE_KEY = 'quickbooks:blue_dot_menu'
+
 
 @login_required
 def request_oauth_token(request):
@@ -42,7 +41,7 @@ def request_oauth_token(request):
     except:
         logger = logging.getLogger('quickbooks.views.request_oauth_token')
         logger.exception(("Couldn't extract oAuth parameters from token " +
-            "request response. Response was '%s'"), response)
+                          "request response. Response was '%s'"), response)
         raise
     return HttpResponseRedirect("%s?oauth_token=%s" % (AUTHORIZATION_URL, request_token))
 
@@ -56,7 +55,6 @@ def get_access_token(request):
                             resource_owner_secret=request.session['qb_oauth_token_secret'])
 
     remote_response = session.parse_authorization_response('?{}'.format(request.META.get('QUERY_STRING')))
-    m =  session.auth.client.__dict__
     realm_id = remote_response['realmId']
     data_source = remote_response['dataSource']
     oauth_verifier = remote_response['oauth_verifier']
@@ -70,11 +68,11 @@ def get_access_token(request):
     request.user.quickbookstoken_set.all().delete()
 
     token = QuickbooksToken.objects.create(
-        user = request.user,
-        access_token = response['oauth_token'],
-        access_token_secret = response['oauth_token_secret'],
-        realm_id = realm_id,
-        data_source = data_source)
+        user=request.user,
+        access_token=response['oauth_token'],
+        access_token_secret=response['oauth_token_secret'],
+        realm_id=realm_id,
+        data_source=data_source)
 
     # Cache blue dot menu
     try:
@@ -82,7 +80,7 @@ def get_access_token(request):
         blue_dot_menu(request)
     except AttributeError:
         raise Exception('The sessions framework must be installed for this ' +
-            'application to work.')
+                        'application to work.')
 
     # Let everyone else know we conneted
     qb_connected.send(None, token=token)
@@ -101,6 +99,7 @@ def blue_dot_menu(request):
         html = request.session[BLUE_DOT_CACHE_KEY] = \
             HttpResponse(QuickbooksApi(request.user).app_menu())
     return html
+
 
 @login_required
 def disconnect(request):
