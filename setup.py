@@ -3,13 +3,13 @@ from setuptools import setup, find_packages
 
 setup(
 
-    name = "QuickBooks",
+    name = "django-quickbooks-online",
 
     version = '0.2',
 
     packages = find_packages(),
 
-    install_requires = ['requests', 'requests-oauthlib', 'lxml', 'python-keyczar', 'django-extensions'],
+    install_requires = ['requests', 'requests-oauthlib', 'python-keyczar==0.71c', 'django-extensions'],
     include_package_data = True,
 
     # metadata for upload to PyPI
