@@ -3,11 +3,13 @@ from lxml import etree
 
 from .exceptions import TagNotFound
 
+
 def get_tag_with_ns(tag_name, ns=None):
     from .api import QB_NAMESPACE
 
     ns = ns or QB_NAMESPACE
     return '{%s}%s' % (ns, tag_name)
+
 
 def getel(elt, tag_name, ns=None):
     """ Gets the first tag that matches the specified tag_name taking into
@@ -23,12 +25,13 @@ def getel(elt, tag_name, ns=None):
         raise TagNotFound('Could not find tag by name "%s"' % tag_name)
     return res
 
+
 def getels(elt, *path):
     """ Gets the first set of elements found at the specified path.
 
     Example:
         >>> xml = (
-        "<root>" +
+            "<root>" +
             "<item>" +
                 "<id>1</id>" +
             "</item>" +
@@ -41,11 +44,12 @@ def getels(elt, *path):
         [<Element item>, <Element item>]
     """
 
-    i=-1
-    for i in range(len(path)-1):
+    i = -1
+    for i in range(len(path) - 1):
         elt = getel(elt, path[i])
-    tag_name = path[i+1]
+    tag_name = path[i + 1]
     return elt.findall(get_tag_with_ns(tag_name))
+
 
 def gettext(elt, tag_name, include_domain=True, **kwargs):
     """ Gets the text value of the specified tag. In the case that idDomain is
@@ -69,11 +73,13 @@ def gettext(elt, tag_name, include_domain=True, **kwargs):
     try:
         el = getel(elt, tag_name, ns=ns)
     except TagNotFound:
-        if 'default' in kwargs: return kwargs['default']
+        if 'default' in kwargs:
+            return kwargs['default']
         raise
     if 'idDomain' in el.attrib:
         return '%s:%s' % (el.get('idDomain'), el.text)
     return el.text
+
 
 def settext(elt, *args):
     """ Sets the text attribute of the specified tag. If args has only one
@@ -91,19 +97,19 @@ def settext(elt, *args):
         els = [getel(elt, args[0])]
         val = args[1]
     else:
-        val = args[len(args)-1]
-        els = getels(elt, *args[0:len(args)-2])
+        val = args[len(args) - 1]
+        els = getels(elt, *args[0:len(args) - 2])
 
     for el in els:
         if isinstance(val, bool):
             el.text = 'true' if val else 'false'
-        elif (isinstance(val, datetime.date) or
-        isinstance(val, datetime.datetime)):
+        elif (isinstance(val, datetime.date) or isinstance(val, datetime.datetime)):
             el.text = val.isoformat()
         else:
             # Not sure that " needs to be replaced by ', but that's how it
             # functioned previous to the refactoring.
             el.text = unicode(val).replace('"', "'")
+
 
 class E(object):
     """ Provides an easy and quick way to build XML.
