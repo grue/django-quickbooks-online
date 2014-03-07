@@ -6,3 +6,7 @@ dist
 *.egg-info
 *.swp
 *.swo
+.env
+.tox/*
+.virtualenv/*
+.watsonrc

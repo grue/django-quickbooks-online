@@ -1,1 +1,2 @@
-class TagNotFound(Exception): pass
+class TagNotFound(Exception):
+    pass

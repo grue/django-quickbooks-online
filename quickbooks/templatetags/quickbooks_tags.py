@@ -4,6 +4,7 @@ from django.utils.safestring import mark_safe
 
 register = template.Library()
 
+
 @register.simple_tag
 def quickbooks_javascript():
     menu_proxy_url = settings.QUICKBOOKS['MENU_URL']
@@ -19,7 +20,7 @@ def quickbooks_javascript():
 
     return mark_safe(result)
 
+
 @register.simple_tag
 def quickbooks_connect_button():
     return mark_safe("<ipp:connectToIntuit></ipp:connectToIntuit>")
-
