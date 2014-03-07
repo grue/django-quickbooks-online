@@ -32,9 +32,11 @@ from .exceptions import TagNotFound
 from .utils import gettext
 from .utils import getel
 
+
 def camel2hyphen(name):
     s1 = re.sub('(.)([A-Z][a-z]+)', r'\1-\2', name)
     return re.sub('([a-z0-9])([A-Z])', r'\1-\2', s1).lower()
+
 
 def obj2xml(parent, params):
     # etree operates on elts in place
@@ -61,6 +63,7 @@ def obj2xml(parent, params):
             elt.text = val
     return parent
 
+
 def xml2obj(elt):
     return elt
     if len(elt) == 0:
@@ -79,21 +82,25 @@ def xml2obj(elt):
         return result
 
 
-
 class QuickbooksError(Exception):
     pass
+
 
 class TryLaterError(QuickbooksError):
     pass
 
+
 class CommunicationError(QuickbooksError):
     pass
+
 
 class AuthenticationFailure(QuickbooksError):
     pass
 
+
 class ApiError(QuickbooksError):
     pass
+
 
 class DuplicateItemError(ApiError):
     pass
@@ -107,7 +114,7 @@ def api_error(response):
     error_code = gettext(err, 'ErrorCode', default='BAD_REQUEST')
     #error_code = err.get('ErrorCode', 'BAD_REQUEST')
     message = gettext(err, 'Message', default=gettext(err, 'ErrorDesc',
-        default=''))
+                      default=''))
     #message = err.get('Message', err.get('ErrorDesc', ''))
     cause = gettext(err, 'Cause', default='')
     #cause = err.get('Cause', '')
@@ -119,8 +126,8 @@ def api_error(response):
         raise AuthenticationFailure()
 
     if cause == '-11202' or db_error_code == '20345':
-        raise DuplicateItemError, err_msg
-    raise ApiError, err_msg
+        raise DuplicateItemError(err_msg)
+    raise ApiError(err_msg)
 
 
 class QuickbooksV3Api(object):
@@ -138,11 +145,12 @@ class QuickbooksV3Api(object):
                                 resource_owner_key=self.token.access_token,
                                 resource_owner_secret=self.token.access_token_secret)
 
-        session.headers.update({'content-type': 'application/json', 'accept':'application/json'})
+        session.headers.update({'content-type': 'application/json', 'accept': 'application/json'})
         self.session = session
         self.realm_id = self.token.realm_id
         self.data_source = self.token.data_source
-        self.url_base = {'QBD': QUICKBOOKS_DESKTOP_V3_URL_BASE, 'QBO': QUICKBOOKS_ONLINE_V3_URL_BASE}[self.token.data_source]
+        self.url_base = {'QBD': QUICKBOOKS_DESKTOP_V3_URL_BASE,
+                         'QBO': QUICKBOOKS_ONLINE_V3_URL_BASE}[self.token.data_source]
 
     def read(self, object_type, entity_id):
         """ Make a call to /company/<token_realm_id>/<object_type>/<entity_id>
@@ -151,7 +159,8 @@ class QuickbooksV3Api(object):
         """
         # [todo] - add error handling for v3 read
         """ Example Error:
-        {u'Fault': {u'Error': [{u'Detail': u'System Failure Error: Could not find resource for relative : /v3/company/<id>/Employee/0 of full path: https://internal.qbo.intuit.com/qbo30/v3/company/<id>/Employee/0',
+        {u'Fault': {u'Error': [{u'Detail': u'System Failure Error: Could not find resource for relative :
+        /v3/company/<id>/Employee/0 of full path: https://internal.qbo.intuit.com/qbo30/v3/company/<id>/Employee/0',
          u'Message': u'An application error has occurred while processing your request',
          u'code': u'10000'}],
          u'type': u'SystemFault'},
@@ -164,7 +173,7 @@ class QuickbooksV3Api(object):
     def query(self, query):
         """
             Documentation for the query language can be found here:
-            https://developer.intuit.com/docs/0025_quickbooksapi/0050_data_services/020_key_concepts/00300_query_operations/0100_key_topics#Pagination
+            https://developer.intuit.com/docs/0025_quickbooksapi/0050_data_services/020_key_concepts/
 
             It is similar to SQL.
         """
@@ -190,6 +199,7 @@ class QuickbooksV3Api(object):
         constructed_url = "{}/company/{}/{}?operation=update".format(self.url_base, self.realm_id, object_type)
         return self.session.post(constructed_url.lower(), object_body).json()
 
+
 class QuickbooksApi(object):
     """ This has been deprecated, and only works reliably with QBD. Use at your own risk. """
     def __init__(self, owner_or_token):
@@ -201,9 +211,9 @@ class QuickbooksApi(object):
             raise ValueError("API must be initialized with either a QuickbooksToken or User")
 
         session = OAuth1Session(client_key=settings.QUICKBOOKS['CONSUMER_KEY'],
-                                                 client_secret=settings.QUICKBOOKS['CONSUMER_SECRET'],
-                                                 resource_owner_key=token.access_token,
-                                                 resource_owner_secret=token.access_token_secret)
+                                client_secret=settings.QUICKBOOKS['CONSUMER_SECRET'],
+                                resource_owner_key=token.access_token,
+                                resource_owner_secret=token.access_token_secret)
 
         self.session = session
         self.realm_id = token.realm_id
@@ -226,8 +236,7 @@ class QuickbooksApi(object):
             return base + 's'
         return base
 
-    def _create_wrapped_qbd_root(self, action, object_name=None,
-    request_and_realm_ids=True, nsmap=None):
+    def _create_wrapped_qbd_root(self, action, object_name=None, request_and_realm_ids=True, nsmap=None):
         wrapper = etree.Element(action, nsmap=(nsmap or self.nsmap))
         if not nsmap:
             wrapper.set(XSI + 'schemaLocation', 'http://www.intuit.com/sb/cdm/V2./RestDataFilter.xsd ')
@@ -255,7 +264,7 @@ class QuickbooksApi(object):
     def _appcenter_request(self, url, retries=3):
         full_url = APPCENTER_URL_BASE + url
 
-        for retry_i in range(retries+1):
+        for retry_i in range(retries + 1):
             content = self._get(full_url).content
 
             try:
@@ -280,8 +289,7 @@ class QuickbooksApi(object):
 
         return content
 
-    def _qb_request(self, object_name, method='GET', object_id=None, xml=None,
-    body_dict=None, retries=3, **kwargs):
+    def _qb_request(self, object_name, method='GET', object_id=None, xml=None, body_dict=None, retries=3, **kwargs):
         url = "%s%s/%s/%s" % (self.url_base, object_name, DATA_SERVICES_VERSION, self.realm_id)
         if object_id:
             url += '/%s' % object_id
@@ -336,7 +344,7 @@ class QuickbooksApi(object):
             if last_err is None:
                 break
         if last_err:
-            raise last_err.__class__ (str(last_err)), None, sys.exc_info()[2]
+            raise last_err.__class__((str(last_err)), None, sys.exc_info()[2])
         return result
 
     def app_menu(self, retries=3):
@@ -375,10 +383,9 @@ class QuickbooksApi(object):
             root, data_root = self._create_wrapped_qbd_root(
                 '%sQuery' % object_name, None,
                 request_and_realm_ids=False,
-                nsmap={None:self.nsmap[None]})
+                nsmap={None: self.nsmap[None]})
             [root.append(el) for el in elements]
             return self._qb_request(url_name, 'POST', xml=root)
-
 
     def read(self, object_name, retries=3):
         """ Get object data from Quickbooks.
@@ -395,7 +402,7 @@ class QuickbooksApi(object):
             while count == 100:
                 these_results = self._qb_request(
                     url_name, 'POST', body_dict={'PageNum': str(page),
-                    'ResultsPerPage': '100'}, retries=retries)
+                                                 'ResultsPerPage': '100'}, retries=retries)
                 count = int(these_results['Count'])
                 if count == 1:
                     results += [these_results['CdmCollections'][object_name]]
@@ -411,22 +418,22 @@ class QuickbooksApi(object):
         if self.data_source == 'QBO':
             return self._qb_request(url_name, 'GET', object_id=object_id)
         else:
-            return self._qb_request(url_name, 'GET', object_id=object_id,
-                idDomain=id_domain)
+            return self._qb_request(url_name, 'GET', object_id=object_id, idDomain=id_domain)
 
     def update(self, object_name, params, retries=3):
         url_name = self._get_url_name(object_name, 'update')
         if self.data_source == 'QBO':
-            root = etree.Element(object_name, nsmap=self.nsmap)
-            root.append(params)
-            return self._qb_request(url_name, 'POST', object_id=object_id,
-                xml=root, retries=retries)
+            # This code is legacy, and broken. Slated for removal.
+            # root = etree.Element(object_name, nsmap=self.nsmap)
+            # root.append(params)
+            # return self._qb_request(url_name, 'POST', object_id=object_id,
+            #     xml=root, retries=retries)
+            pass
         else:
             root, data_root = self._create_wrapped_qbd_root('Mod', object_name)
             for param in params:
                 data_root.append(param)
-            result = self._qb_request(url_name, 'POST', xml=root,
-                retries=retries)
+            result = self._qb_request(url_name, 'POST', xml=root, retries=retries)
 
             container = getel(result, 'Success')
             return getel(container, object_name)
@@ -437,8 +444,7 @@ class QuickbooksApi(object):
         if self.data_source == 'QBO':
             root = etree.Element(object_name, nsmap=self.nsmap)
             obj2xml(root, params)
-            return self._qb_request(url_name, 'POST', object_id=object_id,
-                xml=root, methodx='delete', retries=retries)
+            return self._qb_request(url_name, 'POST', object_id=object_id, xml=root, methodx='delete', retries=retries)
         else:
             root, data_root = self._create_wrapped_qbd_root('Del', object_name)
             obj2xml(data_root, params)
@@ -447,7 +453,7 @@ class QuickbooksApi(object):
     def search(self, object_name, params):
         url_name = self._get_url_name(object_name, 'read')
         if self.data_source == 'QBD':
-            root = etree.Element(object_name+'Query', nsmap=self.nsmap)
+            root = etree.Element(object_name + 'Query', nsmap=self.nsmap)
             obj2xml(root, params)
             return self._qb_request(url_name, 'POST', xml=root)
         else:
