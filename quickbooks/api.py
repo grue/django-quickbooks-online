@@ -67,7 +67,7 @@ class QuickbooksApi(object):
         # https://developer.intuit.com/docs/0025_quickbooksapi/0053_auth_auth/platform_api#AppMenu
         # intuit's documentation is a bit vauge:
         # "Note that this API returns HTML intended for display, not XML data."
-        # "Status code 200—The OAuth access token has expired or is invalid for some other reason. The HTML returned
+        # "Status code 200 - The OAuth access token has expired or is invalid for some other reason. The HTML returned
         # shows the Connect to QuickBooks button within the Intuit Blue Dot menu. "
 
         return content
