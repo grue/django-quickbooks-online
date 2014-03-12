@@ -6,7 +6,6 @@ from django.contrib.auth.models import User
 from quickbooks.models import QuickbooksToken
 
 APPCENTER_URL_BASE = 'https://appcenter.intuit.com/api/v1/'
-DATA_SERVICES_VERSION = 'v2'
 
 QUICKBOOKS_DESKTOP_V3_URL_BASE = 'https://quickbooks.api.intuit.com/v3'
 QUICKBOOKS_ONLINE_V3_URL_BASE = 'https://quickbooks.api.intuit.com/v3'
@@ -57,6 +56,27 @@ class QuickbooksApi(object):
         self.data_source = self.token.data_source
         self.url_base = {'QBD': QUICKBOOKS_DESKTOP_V3_URL_BASE,
                          'QBO': QUICKBOOKS_ONLINE_V3_URL_BASE}[self.token.data_source]
+
+    def _appcenter_request(self, url, retries=3):
+        full_url = APPCENTER_URL_BASE + url
+
+        for retry_i in range(retries + 1):
+            content = self.session.get(full_url).content
+
+        # [todo] - Add some error handling for _appcenter_requests.
+        # https://developer.intuit.com/docs/0025_quickbooksapi/0053_auth_auth/platform_api#AppMenu
+        # intuit's documentation is a bit vauge:
+        # "Note that this API returns HTML intended for display, not XML data."
+        # "Status code 200—The OAuth access token has expired or is invalid for some other reason. The HTML returned
+        # shows the Connect to QuickBooks button within the Intuit Blue Dot menu. "
+
+        return content
+
+    def app_menu(self, retries=3):
+        return self._appcenter_request('account/appmenu', retries=retries)
+
+    def disconnect(self):
+        return self._appcenter_request('connection/disconnect')
 
     def read(self, object_type, entity_id):
         """ Make a call to /company/<token_realm_id>/<object_type>/<entity_id>
