@@ -36,7 +36,7 @@ class DuplicateItemError(ApiError):
     pass
 
 
-class QuickbooksV3Api(object):
+class QuickbooksApi(object):
     """ This is an interface to the QBD and QBO v3 api."""
     def __init__(self, owner_or_token):
         if isinstance(owner_or_token, User):

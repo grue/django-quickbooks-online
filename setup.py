@@ -5,7 +5,7 @@ setup(
 
     name = "django-quickbooks-online",
 
-    version = '0.2',
+    version = '0.2.1',
 
     packages = find_packages(),
 
