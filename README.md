@@ -47,8 +47,8 @@ Installation
 
         <script type="text/javascript" src="https://appcenter.intuit.com/Content/IA/intuit.ipp.anywhere.js"></script>
         <script>intuit.ipp.anywhere.setup({
-            menuProxy: '{{ base_url }}{% url quickbooks:quickbooks.views.blue_dot_menu %}',
-            grantUrl: '{{ base_url }}{% url quickbooks:quickbooks.views.request_oauth_token %}'
+            menuProxy: '{{ base_url }}{% url "quickbooks:quickbooks.views.blue_dot_menu" %}',
+            grantUrl: '{{ base_url }}{% url "quickbooks:quickbooks.views.request_oauth_token" %}'
         });</script>
 
 8. Add the connect button HTML (perhaps in user preferences):
